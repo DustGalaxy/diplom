@@ -13,6 +13,7 @@ class ConfigClass(BaseSettings):
     DB_NAME: str = Field(alias="DB_NAME")
 
     SESSION_LIVE_TIME: int = Field(alias="SESSION_LIVE_TIME")
+    SESSION_SECRET: str = Field(alias="SESSION_SECRET")
 
     NATS_URL: str | None = Field(alias="NATS_URL")
 
