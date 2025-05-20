@@ -1,21 +1,40 @@
 import re
 import io
-from collections import namedtuple
+import json
+from collections import Counter, namedtuple
+from typing import List
 from urllib.parse import urlparse, parse_qs
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from icecream import ic
+from loguru import logger
 
 import librosa as lr
-import pandas as pd
 import numpy as np
-
+from sklearn.preprocessing import normalize
+import soundfile as sf
 from pytubefix import YouTube as YT
 from pydub import AudioSegment
-import soundfile as sf
 from sklearn.neighbors import NearestNeighbors
 from hnswlib import Index
-from src.app.models import Track
+
+from src.repository import NotFoundException
+from src.app.models import Track, crud_playlist, TrackFeature
+
 
 TrackMeta = namedtuple("TrackDTO", ["yt_id", "title", "duration", "artist"])
 AudioData = namedtuple("AudioDataDTO", ["audio_data", "sr"])
+
+
+async def plst_owned_by_user(db_session, plst_id: UUID, user_id: UUID):
+    try:
+        playlist = await crud_playlist.get_one_by_id(db_session, plst_id)
+        if playlist.owner_id != user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        return playlist
+    except NotFoundException:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class YTService:
@@ -53,9 +72,7 @@ class YTService:
 
 
 class RecomendationService:
-    model: NearestNeighbors
-
-    def get_sample_features(self, track: AudioData) -> pd.DataFrame:
+    def get_sample_features(self, track: AudioData) -> dict[str, float | str]:
         """Извлекает признаки из аудиофайла с оптимизациями"""
 
         feature_names = (
@@ -133,7 +150,11 @@ class RecomendationService:
             feature_data.append(mfcc_i.mean())
             feature_data.append(mfcc_i.var())
 
-        return pd.DataFrame([feature_data], columns=feature_names)
+        result = {}
+        for i, f in enumerate(feature_data):
+            result[feature_names[i]] = f
+
+        return result
 
     def download_audio(self, yt_id: str) -> AudioData | None:
         SR = 22050
@@ -141,10 +162,10 @@ class RecomendationService:
             yt = YT.from_id(yt_id)
             audio_stream = yt.streams.filter(only_audio=True).first()
             if not audio_stream:
-                print(f"Не удалось найти аудиопоток для {yt_id}")
+                logger.error(f"Not available streams for: {yt_id}")
                 return None
 
-            print(f"🔽 Скачивание: {yt.title}")
+            logger.info(f"🔽 Download: {yt.title}")
             with io.BytesIO() as memory_file:
                 audio_stream.stream_to_buffer(memory_file)
                 memory_file.seek(0)
@@ -177,66 +198,86 @@ class RecomendationService:
                 return AudioData(data, samplerate)
 
         except Exception as e:
-            print(f"❌ Ошибка при обработке {yt_id}: {e}")
+            logger.error(f"❌ Error on process {yt_id}: {e}")
             return None
 
-    def recommend_similar_tracks(
-        self, input_track_id: int, input_feature, top_n: int = 5, randomness: float = 0.1
-    ) -> list[int]:
-        """
-        Рекомендует похожие треки с использованием UMAP и HNSWlib.
-
-        Args:
-            input_track_id (int): ID трека для рекомендаций
-            top_n (int): Сколько треков рекомендовать
-            randomness (float): Степень случайности в выдаче (0=без случайности, 1=максимальная)
-
-        Returns:
-            list[int]: Список рекомендованных track_id
-        """
-        input_feature = input_feature.reshape(1, -1)
-        model = NearestNeighbors(metric="cosine")
-        reduced_feature = reducer.transform(input_feature)
-
-        # Ищем ближайшие треки
-        distances, indices = model.kneighbors([target_feature_vector], n_neighbors=5)
-
-        # Исключаем сам трек
-        recommended_ids = [track_ids[label] for label in labels if track_ids[label] != input_track_id]
-
-        # Немного случайности: перетасовываем, но ближние имеют больше шансов
-        if randomness > 0:
-            np.random.shuffle(recommended_ids)
-            mix_count = int(len(recommended_ids) * randomness)
-            recommended_ids[:mix_count] = np.random.choice(recommended_ids, size=mix_count, replace=False)
-
-        return recommended_ids[:top_n]
-
-    def recommend_for_playlist_knn(
+    def recommend_tracks_for_playlist(
         self,
-        playlist: list[Track],
+        playlist: List[TrackFeature],
         model: Index,
-        id_to_track: dict[int, "Track"],
+        id_lookup: dict[int, str],
         top_n: int = 10,
-    ) -> list:
+        diversity_k: int = 2,
+        neighbors_per_track: int = 5,
+    ) -> list[str]:
+        """
+        Генерация рекомендаций для всего плейлиста:
+        - 70% треков по усреднённому вектору
+        - 30% треков по голосованию ближайших соседей
+
+        :param playlist: список объектов Track (каждый содержит features.to_vector())
+        :param model: hnswlib.Index — обученный индекс по всем трекам
+        :param id_lookup: dict[int, str] — отображение индекса → track_id
+        :param top_n: общее число треков в рекомендациях
+        :param diversity_k: сколько треков взять из голосования
+        :param neighbors_per_track: сколько соседей использовать для голосования
+        :return: список id рекомендованных треков
+        """
         if not playlist:
-            raise ValueError("playlist не может быть пустым")
+            return []
 
-        playlist_vecs = np.array([track.features.as_vector() for track in playlist])
-        avg_vec = playlist_vecs.mean(axis=0)
+        playlist_vectors = np.array([track.as_vector() for track in playlist])
+        mean_vector = normalize([playlist_vectors.mean(axis=0)])
 
-        labels, distances = model.knn_query(avg_vec, k=top_n * 5)
-        labels = labels[0]
+        # --- Этап 1: рекомендации по настроению (усреднённый вектор) ---
 
-        playlist_ids = set(track.id for track in playlist)
+        mood_labels, _ = model.knn_query(mean_vector, k=top_n * 5)
+        mood_candidates = mood_labels[0]
 
+        playlist_ids = set(track.yt_id for track in playlist)
         recommended = []
-        for track_id in labels:
-            if track_id not in playlist_ids:
-                track = id_to_track.get(track_id)
-                if track:
-                    recommended.append(track)
-            if len(recommended) >= top_n:
+
+        for idx in mood_candidates:
+            track_id = id_lookup.get(idx)
+            if track_id not in playlist_ids and track_id not in recommended:
+                recommended.append(track_id)
+            if len(recommended) >= top_n - diversity_k:
                 break
 
-        return recommended
+        # --- Этап 2: рекомендации по голосованию соседей (разнообразие) ---
+        vote_counter = Counter()
+        for track in playlist:
+            vector = normalize([track.as_vector()])
+            labels, _ = model.knn_query(vector, k=neighbors_per_track)
+            for idx in labels[0]:
+                track_id = id_lookup.get(idx)
+                if track_id and track_id not in playlist_ids:
+                    vote_counter[track_id] += 1
+
+        diversity_part = []
+        for track_id, _ in vote_counter.most_common():
+            if track_id not in recommended:
+                diversity_part.append(track_id)
+            if len(diversity_part) >= diversity_k:
+                break
+
+        return recommended + diversity_part
+
+    def build_recommendation_index(self, tracks: list[TrackFeature]):
+        vectors = np.array([t.as_vector() for t in tracks])
+        vectors = normalize(vectors)  # cosine
+
+        ids = np.arange(len(tracks), dtype=np.int64)
+        id_lookup = {i: str(t.yt_id) for i, t in enumerate(tracks)}
+
+        logger.info("✅ Data prepare complete. Build index...")
+        index = Index(space="cosine", dim=vectors.shape[1])
+        index.init_index(max_elements=len(tracks), ef_construction=200, M=16)
+        index.add_items(vectors, ids)
+
+        logger.info("✅Index build complete. Save results...")
+        index.save_index("recommendations_cache/index.bin")
+
+        with open("recommendations_cache/id_lookup.json", "w") as f:
+            json.dump(id_lookup, f)
+        logger.info("✅ Result seved.")

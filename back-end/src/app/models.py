@@ -1,11 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, Integer, DateTime, delete, select
+from sqlalchemy import ForeignKey, String, Integer, DateTime, delete, or_, select, literal
 from sqlalchemy.dialects.postgresql import UUID as UUIDCOLUMN
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 
 from src.repository import NotFoundException, SnippetException, crud_factory as crud, PydanticSchema
 from src.database import TimestampMixin, UUIDMixin
@@ -62,8 +61,6 @@ class Playlist(Base, UUIDMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        unique=True,
-        index=True,
     )
     description: Mapped[str] = mapped_column(
         String(500),
@@ -90,8 +87,8 @@ class PlaylistTrack(Base, UUIDMixin, TimestampMixin):
     track_id: Mapped[UUID] = mapped_column(ForeignKey("tracks.id"), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    playlist: Mapped["Playlist"] = relationship(back_populates="playlist_tracks")
-    track: Mapped["Track"] = relationship(back_populates="playlist_tracks")
+    playlist: Mapped["Playlist"] = relationship(back_populates="playlist_tracks", lazy="joined")
+    track: Mapped["Track"] = relationship(back_populates="playlist_tracks", lazy="joined")
 
 
 class Track(Base, UUIDMixin, TimestampMixin):
@@ -103,10 +100,11 @@ class Track(Base, UUIDMixin, TimestampMixin):
     yt_id: Mapped[str] = mapped_column(String(25), nullable=False, unique=True)
 
     playlist_tracks: Mapped[list["PlaylistTrack"]] = relationship(back_populates="track")
-    features: Mapped["TrackFeatures"] = relationship(back_populates="track")
+    features: Mapped["TrackFeature"] = relationship(back_populates="track")
 
 
-class TrackFeatures(Base, UUIDMixin, TimestampMixin):
+class TrackFeature(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "track_features"
     yt_id: Mapped[str] = mapped_column(String, ForeignKey("tracks.yt_id"))
     track: Mapped["Track"] = relationship(back_populates="features")
 
@@ -186,12 +184,115 @@ class TrackFeatures(Base, UUIDMixin, TimestampMixin):
     mfcc_20_mean: Mapped[float]
     mfcc_20_var: Mapped[float]
 
+    def as_vector(self) -> list[float]:
+        return [
+            self.chroma_mean,
+            self.chroma_var,
+            self.rms_mean,
+            self.rms_var,
+            self.spectral_centroids_mean,
+            self.spectral_centroids_var,
+            self.spectral_bandwidth_mean,
+            self.spectral_bandwidth_var,
+            self.spectral_rolloff_mean,
+            self.spectral_rolloff_var,
+            self.spectral_contrast_mean,
+            self.spectral_contrast_var,
+            self.zero_crossing_rate_mean,
+            self.zero_crossing_rate_var,
+            self.tempo,
+            self.mfcc_1_mean,
+            self.mfcc_1_var,
+            self.mfcc_2_mean,
+            self.mfcc_2_var,
+            self.mfcc_3_mean,
+            self.mfcc_3_var,
+            self.mfcc_4_mean,
+            self.mfcc_4_var,
+            self.mfcc_5_mean,
+            self.mfcc_5_var,
+            self.mfcc_6_mean,
+            self.mfcc_6_var,
+            self.mfcc_7_mean,
+            self.mfcc_7_var,
+            self.mfcc_8_mean,
+            self.mfcc_8_var,
+            self.mfcc_9_mean,
+            self.mfcc_9_var,
+            self.mfcc_10_mean,
+            self.mfcc_10_var,
+            self.mfcc_11_mean,
+            self.mfcc_11_var,
+            self.mfcc_12_mean,
+            self.mfcc_12_var,
+            self.mfcc_13_mean,
+            self.mfcc_13_var,
+            self.mfcc_14_mean,
+            self.mfcc_14_var,
+            self.mfcc_15_mean,
+            self.mfcc_15_var,
+            self.mfcc_16_mean,
+            self.mfcc_16_var,
+            self.mfcc_17_mean,
+            self.mfcc_17_var,
+            self.mfcc_18_mean,
+            self.mfcc_18_var,
+            self.mfcc_19_mean,
+            self.mfcc_19_var,
+            self.mfcc_20_mean,
+            self.mfcc_20_var,
+        ]
+
 
 crud_user = crud(User)
 crud_playlist = crud(Playlist)
-crud_track = crud(Track)
+
 crud_session = crud(Session)
-crud_features = crud(TrackFeatures)
+
+
+class crud_track(crud(Track)):
+    @classmethod
+    async def query_tracks(
+        cls,
+        session: AsyncSession,
+        title: str,
+    ):
+        q = select(Track).where(
+            or_(
+                Track.title == title,
+                Track.title.ilike(f"%{title}%"),
+                literal(title).cast(String).ilike(f"%{{}}%".format(Track.title)),
+            )
+        )
+
+        result = await session.execute(q)
+        entity_list = result.unique().scalars().all()
+        if entity_list is None or len(entity_list) == 0:
+            raise NotFoundException(f"Not found tracks with: {title}")
+
+        return entity_list
+
+
+class crud_features(crud(TrackFeature)):
+    @classmethod
+    async def get_by_playlist(
+        cls,
+        session: AsyncSession,
+        playlist_id: UUID,
+    ):
+        q = (
+            select(TrackFeature)
+            .join(Track, TrackFeature.track)  # join track_features → tracks
+            .join(PlaylistTrack, PlaylistTrack.track_id == Track.id)  # join tracks → playlist_tracks
+            .join(Playlist, Playlist.id == PlaylistTrack.playlist_id)  # join playlist_tracks → playlists
+            .where(Playlist.id == playlist_id)
+        )
+        result = await session.execute(q)
+        entity_list = result.unique().scalars().all()
+        if entity_list is None or len(entity_list) == 0:
+            raise NotFoundException(f"Not found tracks features for playlist id: {playlist_id}")
+
+        return entity_list
 
 
 class crud_playlist_track(crud(PlaylistTrack)):

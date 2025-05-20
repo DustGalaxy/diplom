@@ -149,7 +149,7 @@ class AsyncCrud(Generic[SQLAlchemyModel], metaclass=CrudMeta):
     async def get_many_by_ids(
         cls,
         session: AsyncSession,
-        ids: list[str | UUID],
+        ids: list[str] | list[UUID],
         column: str = "id",
     ) -> Sequence[SQLAlchemyModel]:
         """Get multiple entities by list of ids"""

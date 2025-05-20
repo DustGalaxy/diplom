@@ -14,6 +14,7 @@ class Login(BaseModel):
 
 
 class UserRead(BaseModel):
+    id: UUID
     username: str
 
     model_config = ConfigDict(from_attributes=True)
@@ -44,6 +45,7 @@ class TrackCreate(BaseModel):
 
 
 class TrackRead(BaseModel):
+    id: UUID
     yt_id: str
     title: str | None = None
     artist: str | None = None
@@ -62,15 +64,18 @@ class PlaylistRead(BaseModel):
     name: str
     description: str | None = None
     tracks_amount: int
-    traks: list[TrackRead] = Field(default_factory=list)
+    # traks: list[TrackRead] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class PlaylistCreate(BaseModel):
     name: str
-    description: str | None = None
     owner_id: UUID | None = None
+
+
+class PlaylistNewname(BaseModel):
+    name: str
 
 
 class PlaylistUpdate(BaseModel):
@@ -79,12 +84,12 @@ class PlaylistUpdate(BaseModel):
     tracks_amount: int | None = None
 
 
-class PlaylistDelete(BaseModel):
-    uuid: UUID
+class PlaylistID(BaseModel):
+    id: UUID
 
 
 class AddTrackToPlaylist(BaseModel):
-    yt_id: str
+    yt_url: str
     playlist_id: UUID
 
 
@@ -101,3 +106,83 @@ class PlaylistTrackUpdate(BaseModel):
 class PlaylistTrackDelete(BaseModel):
     playlist_id: UUID
     track_id: UUID
+
+
+class TrackFeatures(BaseModel):
+    yt_id: str
+
+    chroma_mean: float
+    chroma_var: float
+    rms_mean: float
+    rms_var: float
+    spectral_centroids_mean: float
+    spectral_centroids_var: float
+    spectral_bandwidth_mean: float
+    spectral_bandwidth_var: float
+    spectral_rolloff_mean: float
+    spectral_rolloff_var: float
+    spectral_contrast_mean: float
+    spectral_contrast_var: float
+    zero_crossing_rate_mean: float
+    zero_crossing_rate_var: float
+    tempo: float
+
+    mfcc_1_mean: float
+    mfcc_1_var: float
+
+    mfcc_2_mean: float
+    mfcc_2_var: float
+
+    mfcc_3_mean: float
+    mfcc_3_var: float
+
+    mfcc_4_mean: float
+    mfcc_4_var: float
+
+    mfcc_5_mean: float
+    mfcc_5_var: float
+
+    mfcc_6_mean: float
+    mfcc_6_var: float
+
+    mfcc_7_mean: float
+    mfcc_7_var: float
+
+    mfcc_8_mean: float
+    mfcc_8_var: float
+
+    mfcc_9_mean: float
+    mfcc_9_var: float
+
+    mfcc_10_mean: float
+    mfcc_10_var: float
+
+    mfcc_11_mean: float
+    mfcc_11_var: float
+
+    mfcc_12_mean: float
+    mfcc_12_var: float
+
+    mfcc_13_mean: float
+    mfcc_13_var: float
+
+    mfcc_14_mean: float
+    mfcc_14_var: float
+
+    mfcc_15_mean: float
+    mfcc_15_var: float
+
+    mfcc_16_mean: float
+    mfcc_16_var: float
+
+    mfcc_17_mean: float
+    mfcc_17_var: float
+
+    mfcc_18_mean: float
+    mfcc_18_var: float
+
+    mfcc_19_mean: float
+    mfcc_19_var: float
+
+    mfcc_20_mean: float
+    mfcc_20_var: float
