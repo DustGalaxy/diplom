@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { isYouTubeVideoURL } from "@/lib/utils";
+import StatService from "@/APIs/StatService";
 
 const playlistSearchSchema = z.object({
   p: z.string(),
@@ -68,6 +69,7 @@ export default function PlayPage() {
     } else {
       setNowPlay(playlistContent[index + 1].yt_id);
     }
+    void StatService.sendListenData(nowPlay);
   };
 
   React.useEffect(() => {
@@ -79,7 +81,7 @@ export default function PlayPage() {
   }, [newTrackUrl]);
 
   return (
-    <div className="main h-screen ">
+    <div className="main ">
       <div className="app w-full items-center p-4">
         <NowPlayContext.Provider
           value={{
@@ -93,7 +95,7 @@ export default function PlayPage() {
           <div
             className={`w-full flex justify-center p-4 ${!nowPlay && "hidden"}`}
           >
-            <YoutubePlayer nextVideo={nextTrack} />
+            <YoutubePlayer nextVideo={nextTrack} nowPlay={nowPlay} />
           </div>
           <div className="flex mb-4">
             <Button

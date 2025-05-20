@@ -1,30 +1,16 @@
 import React from "react";
-import { NowPlayContext } from "../routes/playpage";
+import { NowPlayContext } from "./TrackList";
 
 import type { TrackData } from "@/APIs/PlaylistService";
 
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuPortal,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  CirclePause,
-  CirclePlay,
-  EllipsisVertical,
-  Info,
-  Trash,
-} from "lucide-react";
-import PlaylistService from "@/APIs/PlaylistService";
+
+import { CirclePause, CirclePlay, EllipsisVertical, Info } from "lucide-react";
 import StatService from "@/APIs/StatService";
 
 function timeConvert(sec: number | undefined): string {
@@ -36,42 +22,21 @@ function timeConvert(sec: number | undefined): string {
 
 type Props = {
   track: TrackData;
-  for_w: "playlist" | "recommendations";
 };
 
-type StatsData = {
-  date: string;
-  listens: number;
-};
-
-const Track: React.FC<Props> = ({ track, for_w }) => {
+const Track: React.FC<Props> = ({ track }) => {
   const state = React.useContext(NowPlayContext);
   const link = "https://youtu.be/" + track.yt_id;
-  const [statsData, setStatsData] = React.useState<StatsData>({} as StatsData);
+  const [listensData, setListensData] = React.useState<number>(0);
 
-  const removeTrack = async () => {
-    if (
-      await PlaylistService.removeTrackFromPlaylist(state.playlist_id, track.id)
-    ) {
-      state.setPlaylistContent(
-        state.playlistContent.filter((t) => t.id !== track.id)
-      );
-    }
-  };
-  const addToPlaylist = async () => {
-    if (await PlaylistService.addTrackToPlaylist(state.playlist_id, link)) {
-      state.setPlaylistContent([...state.playlistContent, track]);
-    }
+  const copyToClipboard = async () => {
+    await navigator.clipboard.writeText(link);
   };
 
-  const getStat = async () => {
-    const date = await StatService.getDateAddToPlaylist(
-      track.id,
-      state.playlist_id
-    );
+  const getListens = async () => {
     const listens = await StatService.getStatByTrack(track.yt_id);
-    if (date === null || listens === null) return;
-    setStatsData({ date: date.toLocaleDateString(), listens: listens });
+    if (listens === null) return;
+    setListensData(listens);
   };
 
   return (
@@ -117,15 +82,14 @@ const Track: React.FC<Props> = ({ track, for_w }) => {
       <div className="dropdown">
         <DropdownMenu
           onOpenChange={(open) => {
-            if (open) getStat();
+            if (open) getListens();
           }}
         >
           <DropdownMenuTrigger className="w-10 h-full flex justify-center items-center">
             <Info />
           </DropdownMenuTrigger>
           <DropdownMenuContent className="bg-gray-600 text-white">
-            <DropdownMenuItem>Прослухали: {statsData.listens}</DropdownMenuItem>
-            <DropdownMenuItem>У плейлиcті з {statsData.date}</DropdownMenuItem>
+            <DropdownMenuItem>Прослухали: {listensData}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
@@ -136,15 +100,9 @@ const Track: React.FC<Props> = ({ track, for_w }) => {
             <DropdownMenuItem>
               <a href={link}>Відкрити на YouTube</a>
             </DropdownMenuItem>
-            {for_w === "playlist" ? (
-              <DropdownMenuItem className="bg-red-700" onClick={removeTrack}>
-                Вилучити з плейлисту
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem onClick={addToPlaylist}>
-                Додати в плейлист
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem onClick={copyToClipboard}>
+              Копіювати посилання
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

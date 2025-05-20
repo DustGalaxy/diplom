@@ -3,11 +3,11 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import PlaylistItem from "@/components/PlaylistItem";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import PlaylistService, { type TrackData } from "@/APIs/PlaylistService";
 import { useAuth } from "@/auth";
+import TrackList from "@/components/TrackList";
 
 export const Route = createFileRoute("/home")({
   component: Home,
@@ -30,10 +30,6 @@ export const Route = createFileRoute("/home")({
 export default function Home() {
   const data = Route.useLoaderData();
   const [playlists, setPlaylists] = React.useState(data);
-  const [trackQuery, setTrackQuery] = React.useState("");
-  const [seachedTracks, setSeachedTracks] = React.useState<TrackData[]>([]);
-
-  const auth = useAuth();
 
   const createPlaylist = async () => {
     const playlist = await PlaylistService.newPlaylist("новий плейлиcт");
@@ -42,15 +38,8 @@ export default function Home() {
     }
   };
 
-  const fetchTracks = async () => {
-    const tracks = await PlaylistService.getTracksByQuery(trackQuery);
-    if (tracks) {
-      setSeachedTracks(tracks);
-    }
-  };
-
   return (
-    <div className="main h-screen ">
+    <div className="main ">
       <div className="app w-full items-center p-4"></div>
       <Tabs
         defaultValue="playlists"
@@ -87,7 +76,7 @@ export default function Home() {
           ))}
         </TabsContent>
         <TabsContent value="music">
-          <div className="flex mb-4">
+          {/* <div className="flex mb-4">
             <Button
               onClick={fetchTracks}
               variant={"ghost"}
@@ -100,7 +89,8 @@ export default function Home() {
               onChange={(e) => setTrackQuery(e.target.value)}
               value={trackQuery}
             />
-          </div>
+          </div> */}
+          <TrackList />
         </TabsContent>
       </Tabs>
     </div>

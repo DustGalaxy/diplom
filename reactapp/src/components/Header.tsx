@@ -14,10 +14,10 @@ export default function Header() {
           <div className="px-2 ">
             <Link to="/home">Головна</Link>
           </div>
-          <Separator orientation="vertical" />
-          <div className="px-2  ">
+          {/*<Separator orientation="vertical" />
+           <div className="px-2  ">
             <Link to="/about">О сайті</Link>
-          </div>
+          </div> */}
         </div>
 
         <div className="flex ">

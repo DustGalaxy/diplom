@@ -1,15 +1,17 @@
 import React, { useContext } from "react";
 import YouTube from "react-youtube";
 import type { YouTubeProps, YouTubeEvent } from "react-youtube";
-import { NowPlayContext } from "@/routes/playpage";
 import useWindowDimensions from "@/hooks/useWindowDimensions";
 
 type YoutubePlayerProps = {
   nextVideo: () => void;
+  nowPlay: string;
 };
 
-const YoutubePlayer: React.FC<YoutubePlayerProps> = ({ nextVideo }) => {
-  const state = useContext(NowPlayContext);
+const YoutubePlayer: React.FC<YoutubePlayerProps> = ({
+  nextVideo,
+  nowPlay,
+}) => {
   const { height, width } = useWindowDimensions();
   const opts: YouTubeProps["opts"] = {
     height: width > 650 ? "360" : "180",
@@ -32,7 +34,7 @@ const YoutubePlayer: React.FC<YoutubePlayerProps> = ({ nextVideo }) => {
 
   return (
     <YouTube
-      videoId={state?.nowPlay || ""}
+      videoId={nowPlay || ""}
       opts={opts}
       onReady={_onReady}
       onEnd={nextVideo}
