@@ -244,10 +244,35 @@ class TrackFeature(Base, UUIDMixin, TimestampMixin):
         ]
 
 
+class StatTrack(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "tracks_stat"
+    yt_id: Mapped[str] = mapped_column(ForeignKey("tracks.yt_id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    track_playback: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
 crud_user = crud(User)
 crud_playlist = crud(Playlist)
 
 crud_session = crud(Session)
+
+
+class crud_stat(crud(StatTrack)):
+    @classmethod
+    async def get(
+        cls,
+        session: AsyncSession,
+        yt_id: str,
+        user_id: UUID,
+    ):
+        q = select(cls.model_class).where(cls.model_class.user_id == user_id).where(cls.model_class.yt_id == yt_id)
+
+        result = await session.execute(q)
+        entity = result.unique().scalar_one_or_none()
+        if entity is None:
+            raise NotFoundException("Not found")
+
+        return entity
 
 
 class crud_track(crud(Track)):

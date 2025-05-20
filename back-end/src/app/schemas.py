@@ -3,6 +3,23 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from datetime import datetime
 
 
+class UUID_(BaseModel):
+    id: UUID | str
+
+
+class StatCreate(BaseModel):
+    yt_id: str
+    user_id: UUID
+
+
+class StatTrackPlaybackRead(BaseModel):
+    track_playback: int
+
+
+class StatUpdate(BaseModel):
+    track_playback: int
+
+
 class SessionCreate(BaseModel):
     user_id: UUID
     expires_at: datetime
@@ -97,6 +114,11 @@ class PlaylistTrackCreate(BaseModel):
     playlist_id: UUID
     track_id: UUID
     position: int
+
+
+class PlaylistTrackRead(BaseModel):
+    playlist_id: UUID
+    track_id: UUID
 
 
 class PlaylistTrackUpdate(BaseModel):

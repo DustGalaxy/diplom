@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 from typing import Annotated
 from uuid import UUID
@@ -12,12 +13,17 @@ from src.database import get_async_session
 
 from src.app.services import RecomendationService, YTService, plst_owned_by_user
 from src.app.tasks import track_features
-from src.app.models import crud_features, crud_playlist_track, crud_playlist, crud_user, crud_track, User
+from src.app.models import crud_features, crud_playlist_track, crud_playlist, crud_user, crud_track, User, crud_stat
 from src.app.auth import auth_handler
 from src.app.schemas import (
+    UUID_,
     AddTrackToPlaylist,
     Login,
     PlaylistNewname,
+    PlaylistTrackRead,
+    StatCreate,
+    StatTrackPlaybackRead,
+    StatUpdate,
     UserRead,
     UserCreate,
     TrackRead,
@@ -106,6 +112,51 @@ async def get_tracks_by_query(
     return [TrackRead.model_validate(track) for track in tracks]
 
 
+@router.post("/track/stat", status_code=200)
+async def add_listen(
+    yt_id: UUID_,
+    user: Annotated[User, Depends(auth_handler.get_current_user)],
+    db_session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    try:
+        stat_obj = await crud_stat.get(db_session, yt_id.id, user.id)  # type: ignore
+        await crud_stat.update_by_id(db_session, StatUpdate(track_playback=stat_obj + 1), stat_obj.id)
+    except NotFoundException:
+        await crud_stat.create(db_session, StatCreate(yt_id=yt_id.id, user_id=user.id))  # type: ignore
+
+
+@router.get("/track/stat", status_code=200)
+async def get_stat_track_playback(
+    yt_id: str,
+    user: Annotated[User, Depends(auth_handler.get_current_user)],
+    db_session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    try:
+        stat_obj = await crud_stat.get(db_session, yt_id, user.id)  # type: ignore
+        return StatTrackPlaybackRead(
+            track_playback=stat_obj.track_playback,
+        )
+    except NotFoundException:
+        return StatTrackPlaybackRead(
+            track_playback=0,
+        )
+
+
+@router.get("/track_plst/stat", status_code=200)
+async def get_stat_date_add_to_plst(
+    playlist_id: UUID,
+    track_id: UUID,
+    user: Annotated[User, Depends(auth_handler.get_current_user)],
+    db_session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict[str, datetime]:
+    playlist = await plst_owned_by_user(db_session, playlist_id, user.id)
+    try:
+        stat_obj = await crud_playlist_track.select_by_track_and_playlist(db_session, track_id, playlist_id)  # type: ignore
+        return {"in_playlist_since": stat_obj.created_at}
+    except NotFoundException:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+
+
 @router.get("/playlists/{plst_id}", status_code=200)
 async def get_tracks(
     plst_id: UUID,
@@ -114,6 +165,7 @@ async def get_tracks(
 ):
     playlist = await plst_owned_by_user(db_session, plst_id, user.id)
 
+    # TODO sorting by position
     tracks_rel = await crud_playlist_track.get_many_by_value(db_session, playlist.id, "playlist_id")
     return [
         TrackRead(
