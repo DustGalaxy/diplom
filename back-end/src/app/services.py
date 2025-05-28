@@ -74,87 +74,64 @@ class YTService:
 class RecomendationService:
     def get_sample_features(self, track: AudioData) -> dict[str, float | str]:
         """Извлекает признаки из аудиофайла с оптимизациями"""
+        audio_data, sr = track.audio_data, track.sr
+        features = {}
 
-        feature_names = (
-            [
-                "chroma_mean",
-                "chroma_var",
-                "rms_mean",
-                "rms_var",
-                "spectral_centroids_mean",
-                "spectral_centroids_var",
-                "spectral_bandwidth_mean",
-                "spectral_bandwidth_var",
-                "spectral_rolloff_mean",
-                "spectral_rolloff_var",
-                "spectral_contrast_mean",
-                "spectral_contrast_var",
-                "zero_crossing_rate_mean",
-                "zero_crossing_rate_var",
-                # "harmonic_mean",
-                # "harmonic_var",
-                # "percussive_mean",
-                # "percussive_var",
-                "tempo",
-            ]
-            + [f"mfcc_{i + 1}_mean" for i in range(20)]
-            + [f"mfcc_{i + 1}_var" for i in range(20)]
-        )
+        # Предобработка: trim + STFT
+        y, _ = lr.effects.trim(audio_data)
+        S = np.abs(lr.stft(y))
+        S_db = lr.power_to_db(S**2)
 
-        # Убираем тишину
-        audio_file, _ = lr.effects.trim(track.audio_data)
+        # 1. Стандартные признаки
+        features["chroma_mean"] = lr.feature.chroma_stft(S=S, sr=sr).mean()
+        features["chroma_var"] = lr.feature.chroma_stft(S=S, sr=sr).var()
+        features["rms_mean"] = lr.feature.rms(S=S).mean()
+        features["rms_var"] = lr.feature.rms(S=S).var()
+        spectral_centroids = lr.feature.spectral_centroid(S=S, sr=sr)
+        features["spectral_centroids_mean"] = spectral_centroids.mean()
+        features["spectral_centroids_var"] = spectral_centroids.var()
+        spectral_bandwidth = lr.feature.spectral_bandwidth(S=S, sr=sr)
+        features["spectral_bandwidth_mean"] = spectral_bandwidth.mean()
+        features["spectral_bandwidth_var"] = spectral_bandwidth.var()
+        spectral_rolloff = lr.feature.spectral_rolloff(S=S, sr=sr)
+        features["spectral_rolloff_mean"] = spectral_rolloff.mean()
+        features["spectral_rolloff_var"] = spectral_rolloff.var()
+        spectral_contrast = lr.feature.spectral_contrast(S=S, sr=sr)
+        features["spectral_contrast_mean"] = spectral_contrast.mean()
+        features["spectral_contrast_var"] = spectral_contrast.var()
+        zcr = lr.feature.zero_crossing_rate(y)
+        features["zero_crossing_rate_mean"] = zcr.mean()
+        features["zero_crossing_rate_var"] = zcr.var()
+        tempo, _ = lr.beat.beat_track(y=y, sr=sr)
+        features["tempo"] = tempo
 
-        # Общий STFT
-        stft = np.abs(lr.stft(audio_file))
+        # 2. MFCCs
+        mfcc = lr.feature.mfcc(S=S_db, sr=sr, n_mfcc=20)
+        for i in range(20):
+            features[f"mfcc_{i + 1}_mean"] = mfcc[i].mean()
+            features[f"mfcc_{i + 1}_var"] = mfcc[i].var()
 
-        # Вычисляем признаки
-        zero_crossing_rate = lr.feature.zero_crossing_rate(audio_file)
-        chroma_stft = lr.feature.chroma_stft(S=stft, sr=track.sr)
-        rms = lr.feature.rms(S=stft)
-        spectral_rolloff = lr.feature.spectral_rolloff(S=stft, sr=track.sr)
-        spectral_bandwidth = lr.feature.spectral_bandwidth(S=stft, sr=track.sr)
-        spectral_contrast = lr.feature.spectral_contrast(S=stft, sr=track.sr)
-        spectral_centroids = lr.feature.spectral_centroid(S=stft, sr=track.sr)
+        # 3. Дополнительные признаки
 
-        # MFCC
-        mfcc = lr.feature.mfcc(S=lr.power_to_db(stft), sr=track.sr, n_mfcc=20)
+        # Спектральная плоскостность (шумность)
+        flatness = lr.feature.spectral_flatness(S=S)
+        features["spectral_flatness_mean"] = flatness.mean()
+        features["spectral_flatness_var"] = flatness.var()
 
-        # Темп
-        tempo, _ = lr.beat.beat_track(y=audio_file, sr=track.sr)
+        # Гармоническая и перкуссионная энергия
+        harmonic, percussive = lr.effects.hpss(y)
+        features["harmonic_energy"] = np.mean(np.abs(harmonic))
+        features["percussive_energy"] = np.mean(np.abs(percussive))
+        features["harmonic_percussive_ratio"] = features["harmonic_energy"] / (features["percussive_energy"] + 1e-6)
 
-        # Убираем harmonic и percussive (ОЧЕНЬ медленные)
-        # percussive = lr.effects.percussive(y=audio_file)
-        # harmonic = lr.effects.harmonic(y=audio_file)
+        # Энтропия мелспектра
+        mel = lr.feature.melspectrogram(y=y, sr=sr, S=S, n_mels=128)
+        mel_norm = mel / (mel.sum(axis=0, keepdims=True) + 1e-6)
+        entropy = -np.sum(mel_norm * np.log(mel_norm + 1e-6), axis=0)
+        features["mel_entropy_mean"] = entropy.mean()
+        features["mel_entropy_var"] = entropy.var()
 
-        feature_data = [
-            chroma_stft.mean(),
-            chroma_stft.var(),
-            rms.mean(),
-            rms.var(),
-            spectral_centroids.mean(),
-            spectral_centroids.var(),
-            spectral_bandwidth.mean(),
-            spectral_bandwidth.var(),
-            spectral_rolloff.mean(),
-            spectral_rolloff.var(),
-            spectral_contrast.mean(),
-            spectral_contrast.var(),
-            zero_crossing_rate.mean(),
-            zero_crossing_rate.var(),
-            # harmonic.mean(), harmonic.var(),  # Убрали для ускорения
-            # percussive.mean(), percussive.var(),
-            tempo[0] if isinstance(tempo, np.ndarray) else tempo,
-        ]
-
-        for mfcc_i in mfcc:
-            feature_data.append(mfcc_i.mean())
-            feature_data.append(mfcc_i.var())
-
-        result = {}
-        for i, f in enumerate(feature_data):
-            result[feature_names[i]] = f
-
-        return result
+        return features
 
     def download_audio(self, yt_id: str) -> AudioData | None:
         SR = 22050
@@ -209,46 +186,37 @@ class RecomendationService:
         top_n: int = 10,
         diversity_k: int = 2,
         neighbors_per_track: int = 5,
-    ) -> list[str]:
-        """
-        Генерация рекомендаций для всего плейлиста:
-        - 70% треков по усреднённому вектору
-        - 30% треков по голосованию ближайших соседей
-
-        :param playlist: список объектов Track (каждый содержит features.to_vector())
-        :param model: hnswlib.Index — обученный индекс по всем трекам
-        :param id_lookup: dict[int, str] — отображение индекса → track_id
-        :param top_n: общее число треков в рекомендациях
-        :param diversity_k: сколько треков взять из голосования
-        :param neighbors_per_track: сколько соседей использовать для голосования
-        :return: список id рекомендованных треков
-        """
+        with_scores: bool = False,
+    ) -> list[str] | list[tuple[str, float]]:
         if not playlist:
             return []
 
         playlist_vectors = np.array([track.as_vector() for track in playlist])
         mean_vector = normalize([playlist_vectors.mean(axis=0)])
 
-        # --- Этап 1: рекомендации по настроению (усреднённый вектор) ---
-
-        mood_labels, _ = model.knn_query(mean_vector, k=top_n * 5)
-        mood_candidates = mood_labels[0]
+        # --- Этап 1: по усреднённому вектору ---
+        k1 = min(top_n * 5, model.get_current_count())
+        mood_labels, distances = model.knn_query(mean_vector, k=k1)
 
         playlist_ids = set(track.yt_id for track in playlist)
-        recommended = []
+        recommended: list[str] = []
+        scores: dict[str, float] = {}
 
-        for idx in mood_candidates:
-            track_id = id_lookup.get(idx)
+        for idx, dist in zip(mood_labels[0], distances[0]):
+            track_id = id_lookup.get(idx, "")
             if track_id not in playlist_ids and track_id not in recommended:
                 recommended.append(track_id)
+                similarity = max(0.0, 1.0 - dist / 2.0)  # cosine ∈ [0,2]
+                scores[track_id] = round(similarity * 100, 2)  # проценты
             if len(recommended) >= top_n - diversity_k:
                 break
 
-        # --- Этап 2: рекомендации по голосованию соседей (разнообразие) ---
+        # --- Этап 2: разнообразие через голосование ---
         vote_counter = Counter()
         for track in playlist:
             vector = normalize([track.as_vector()])
-            labels, _ = model.knn_query(vector, k=neighbors_per_track)
+            k2 = min(neighbors_per_track, model.get_current_count())
+            labels, _ = model.knn_query(vector, k=k2)
             for idx in labels[0]:
                 track_id = id_lookup.get(idx)
                 if track_id and track_id not in playlist_ids:
@@ -261,9 +229,15 @@ class RecomendationService:
             if len(diversity_part) >= diversity_k:
                 break
 
-        return recommended + diversity_part
+        full_list = recommended + diversity_part
+        if with_scores:
+            return [(track_id, scores.get(track_id, 0.0)) for track_id in full_list]
+        return full_list
 
     def build_recommendation_index(self, tracks: list[TrackFeature]):
+        if not tracks:
+            logger.warning("⚠  No track to build index.")
+            return
         vectors = np.array([t.as_vector() for t in tracks])
         vectors = normalize(vectors)  # cosine
 

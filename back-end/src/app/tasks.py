@@ -6,6 +6,7 @@ from src.database import async_session_maker
 from src.app.models import crud_features
 from src.app.schemas import TrackFeatures
 from src.app.services import RecomendationService
+from src.repository import IntegrityConflictException
 
 
 @broker.task
@@ -22,9 +23,10 @@ async def track_features(yt_id: str):
 
     async with async_session_maker() as session:
         await crud_features.create(session, TrackFeatures.model_validate(features))
-        logger.info("✅ Result seved.")
+        await session.commit()
+        logger.info("✅ Result saved.")
 
-    logger.info("✅ Task complete.")
+    logger.info("🎯 Task complete.")
 
 
 @broker.task(schedule=[{"cron": "*/5 * * * *"}])

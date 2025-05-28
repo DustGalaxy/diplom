@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID as UUIDCOLUMN
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.repository import NotFoundException, SnippetException, crud_factory as crud, PydanticSchema
+from src.repository import NotFoundException, SnippetException, crud_factory as crud
 from src.database import TimestampMixin, UUIDMixin
 from src.database import Base
 
@@ -124,6 +124,12 @@ class TrackFeature(Base, UUIDMixin, TimestampMixin):
     zero_crossing_rate_var: Mapped[float]
     tempo: Mapped[float]
 
+    spectral_flatness_mean: Mapped[float]
+    spectral_flatness_var: Mapped[float]
+    harmonic_percussive_ratio: Mapped[float]
+    mel_entropy_mean: Mapped[float]
+    mel_entropy_var: Mapped[float]
+
     mfcc_1_mean: Mapped[float]
     mfcc_1_var: Mapped[float]
 
@@ -201,6 +207,11 @@ class TrackFeature(Base, UUIDMixin, TimestampMixin):
             self.zero_crossing_rate_mean,
             self.zero_crossing_rate_var,
             self.tempo,
+            self.spectral_flatness_mean,
+            self.spectral_flatness_var,
+            self.harmonic_percussive_ratio,
+            self.mel_entropy_mean,
+            self.mel_entropy_var,
             self.mfcc_1_mean,
             self.mfcc_1_var,
             self.mfcc_2_mean,

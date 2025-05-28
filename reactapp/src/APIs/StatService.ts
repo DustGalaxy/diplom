@@ -22,6 +22,23 @@ export default class StatService {
     }
   }
 
+  static async sendClickTrack(track_yt_id: string): Promise<number | null> {
+    try {
+      const response = await axios.post(
+        `${BASIC_API_URL}/user/history`,
+        {
+          yt_id: track_yt_id,
+        },
+        {
+          withCredentials: true,
+        }
+      );
+      return response.status === 200 ? response.data.track_playback : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   static async getDateAddToPlaylist(
     track_id: string,
     playlist_id: string

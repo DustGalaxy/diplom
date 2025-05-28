@@ -6,12 +6,12 @@ from uuid6 import uuid7
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID as UUIDCOLUMN
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, AsyncEngine
 from sqlalchemy.ext.declarative import declarative_base
 
 from src.config import Config
 
-engine = create_async_engine(Config.DB_URL)
+engine: AsyncEngine = create_async_engine(Config.DB_URL)
 async_session_maker = async_sessionmaker(
     engine,
     class_=AsyncSession,

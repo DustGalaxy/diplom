@@ -22,6 +22,8 @@ import {
   CirclePlay,
   EllipsisVertical,
   Info,
+  Star,
+  StarHalf,
   Trash,
 } from "lucide-react";
 import PlaylistService from "@/APIs/PlaylistService";
@@ -47,6 +49,7 @@ type StatsData = {
 const Track: React.FC<Props> = ({ track, for_w }) => {
   const state = React.useContext(NowPlayContext);
   const link = "https://youtu.be/" + track.yt_id;
+
   const [statsData, setStatsData] = React.useState<StatsData>({} as StatsData);
 
   const removeTrack = async () => {
@@ -115,6 +118,18 @@ const Track: React.FC<Props> = ({ track, for_w }) => {
         </ul>
       </div>
       <div className="dropdown">
+        <div className="mr-2">
+          {for_w === "recommendations" ? (
+            track.score && track.score > 98 ? (
+              <Star />
+            ) : (
+              <StarHalf />
+            )
+          ) : (
+            <></>
+          )}
+        </div>
+
         <DropdownMenu
           onOpenChange={(open) => {
             if (open) getStat();

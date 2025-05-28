@@ -14,9 +14,10 @@ from src.admin import authentication_backend
 from src.database import engine, async_session_maker, get_async_session
 from src.database import drop_db, create_db  # noqa: F401
 
-from src.app.models import crud_user
+from src.app.models import crud_features, crud_track, crud_user
 from src.app.schemas import UserCreate
 from src.app.routes import router as app_router
+from src.app.tasks import track_features
 from src.broker_taskiq import broker
 
 
@@ -62,6 +63,28 @@ app.include_router(app_router)
 async def ping(db_session: Annotated[AsyncSession, Depends(get_async_session)]):
     user = await crud_user.create(db_session, UserCreate(username="test", password="test", email="test@gmail.com"))
     ic(user.id)
+    return {"message": "pong"}
+
+
+@app.get("/rebuild_all_audio")
+async def rebuild_all(db_session: Annotated[AsyncSession, Depends(get_async_session)]):
+    tracks = await crud_track.get_all(db_session, limit=None)
+    f_tracks = await crud_features.get_all(db_session, limit=None)
+    ids = [item.yt_id for item in f_tracks[0]]
+
+    for track in tracks[0]:
+        if track.yt_id not in ids:
+            print(track.yt_id)
+            await track_features.kiq(track.yt_id)
+
+    return {"message": "pong"}
+
+
+@app.get("/rebuild_one_audio")
+async def rebuild_one(db_session: Annotated[AsyncSession, Depends(get_async_session)]):
+    tracks = await crud_track.get_all(db_session, limit=10)
+
+    await track_features.kiq(tracks[0][0].yt_id)
     return {"message": "pong"}
 
 

@@ -6,6 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from hnswlib import Index
+from pytubefix.exceptions import VideoUnavailable
+
 
 from src.config import Config
 from src.repository import NotFoundException
@@ -27,6 +29,7 @@ from src.app.schemas import (
     UserRead,
     UserCreate,
     TrackRead,
+    TrackRecommendRead,
     TrackCreate,
     TrackSwap,
     PlaylistRead,
@@ -205,7 +208,7 @@ async def add_track_to_playlist(
         track_meta = YTService.get_basic_track_details(yt_id)
         track = await crud_track.get_one_by_id(db_session, yt_id, column="yt_id")
 
-    except ValueError as e:
+    except (ValueError, VideoUnavailable) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except NotFoundException:
         track = await crud_track.create(
@@ -285,7 +288,7 @@ async def playlist_recomendations(
         features = await crud_features.get_by_playlist(db_session, playlist.id)
         playlist_features = list(features)
 
-        model = Index(space="cosine", dim=55)
+        model = Index(space="cosine", dim=60)
         model.load_index("recommendations_cache/index.bin")
 
         id_lookup: dict[int, str] = {}
@@ -294,10 +297,18 @@ async def playlist_recomendations(
             id_lookup = {int(k): v for k, v in id_lookup_raw.items()}
 
         service = RecomendationService()
-        playlist_recomendations = service.recommend_tracks_for_playlist(playlist_features, model, id_lookup)
+        playlist_recomendations = service.recommend_tracks_for_playlist(
+            playlist_features, model, id_lookup, with_scores=True
+        )
+        tracks = await crud_track.get_many_by_ids(db_session, [item[0] for item in playlist_recomendations], "yt_id")
 
-        tracks = await crud_track.get_many_by_ids(db_session, playlist_recomendations, "yt_id")
+        result = []
 
-        return [TrackRead.model_validate(track) for track in tracks]
+        for item in playlist_recomendations:
+            track = next(x for x in tracks if x.yt_id == item[0])
+            track.score = item[1]
+            result.append(track)
+
+        return [TrackRecommendRead.model_validate(track) for track in result]
     except NotFoundException:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)

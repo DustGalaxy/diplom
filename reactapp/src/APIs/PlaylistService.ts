@@ -13,6 +13,7 @@ export type TrackData = {
   yt_id: string;
   duration: number;
   artist: string;
+  score: number | null;
 };
 
 export default class PlaylistService {

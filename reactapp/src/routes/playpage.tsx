@@ -52,6 +52,7 @@ export default function PlayPage() {
   const [playlistContent, setPlaylistContent] =
     React.useState<TrackData[]>(tracks);
 
+  const [urlError, setUrlError] = React.useState<string | null>(null);
   const [newTrackUrl, setNewTrackUrl] = React.useState("");
   const [isCorrectUrl, setIsCorrectUrl] = React.useState(false);
   const addtrack = async () => {
@@ -59,6 +60,13 @@ export default function PlayPage() {
     if (track) {
       setPlaylistContent([...playlistContent, track]);
       setNewTrackUrl("");
+    } else {
+      setUrlError(
+        "Не вдалося додати трек до плейлиста. Перевірте привильність посилання."
+      );
+      setTimeout(() => {
+        setUrlError(null);
+      }, 7000);
     }
   };
 
@@ -97,28 +105,29 @@ export default function PlayPage() {
           >
             <YoutubePlayer nextVideo={nextTrack} nowPlay={nowPlay} />
           </div>
-          <div className="flex mb-4">
-            <Button
-              onClick={addtrack}
-              disabled={!isCorrectUrl}
-              variant={"ghost"}
-              className=" bg-gray-600 mr-4 "
-            >
-              Додати до плейлісту
-            </Button>
-            <Input
-              placeholder="Посилання на youtube відео"
-              onChange={(e) => setNewTrackUrl(e.target.value)}
-              value={newTrackUrl}
-            />
+          <div>
+            <div className="flex mb-4">
+              <Button
+                onClick={addtrack}
+                disabled={!isCorrectUrl}
+                variant={"ghost"}
+                className=" bg-gray-600 mr-4 "
+              >
+                Додати до плейлісту
+              </Button>
+              <Input
+                placeholder="Посилання на youtube відео"
+                onChange={(e) => setNewTrackUrl(e.target.value)}
+                value={newTrackUrl}
+              />
+            </div>
+            {urlError && <p className="text-red-500 mb-4">{urlError}</p>}
           </div>
+
           <div className="List">
             <PlayList />
           </div>
         </NowPlayContext.Provider>
-        {/* <div className="Recomend">
-          <Recomendations />
-        </div> */}
       </div>
     </div>
   );
