@@ -51,6 +51,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     sessions: Mapped[list["Session"]] = relationship(
         "Session",
         back_populates="user",
+        lazy="joined",
         cascade="all, delete-orphan",
     )
 

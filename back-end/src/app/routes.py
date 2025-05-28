@@ -71,7 +71,7 @@ async def logout(
     user: Annotated[User, Depends(auth_handler.get_current_user)],
     session_id=Cookie("session_id"),
 ):
-    if session_id in [session.id for session in user.sessions]:
+    if session_id in [str(session.id) for session in user.sessions]:
         await auth_handler.delete_session(db_session, session_id)
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logined")
