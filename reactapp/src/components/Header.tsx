@@ -21,7 +21,9 @@ export default function Header() {
         </div>
 
         <div className="flex ">
-          <div className="px-2">{auth.user?.username}</div>
+          <a href="/account" className="px-2">
+            {auth.user?.username}
+          </a>
           <Separator orientation="vertical" />
           <div className="px-2">
             {auth.user ? (

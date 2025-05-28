@@ -134,6 +134,16 @@ class PlaylistTrackDelete(BaseModel):
     track_id: UUID
 
 
+class ArtistPopylarity(BaseModel):
+    artist: str
+    play_count: int
+
+
+class HistoryRead(BaseModel):
+    datetime: datetime
+    track: TrackRead
+
+
 class TrackFeatures(BaseModel):
     yt_id: str
 

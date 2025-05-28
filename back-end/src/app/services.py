@@ -1,3 +1,4 @@
+from datetime import datetime
 import re
 import io
 import json
@@ -18,9 +19,11 @@ from pytubefix import YouTube as YT
 from pydub import AudioSegment
 from sklearn.neighbors import NearestNeighbors
 from hnswlib import Index
+from sqlalchemy import and_, func, outerjoin, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.repository import NotFoundException
-from src.app.models import Track, crud_playlist, TrackFeature
+from src.app.models import StatUserhistory, Track, crud_playlist, TrackFeature
 
 
 TrackMeta = namedtuple("TrackDTO", ["yt_id", "title", "duration", "artist"])
@@ -35,6 +38,27 @@ async def plst_owned_by_user(db_session, plst_id: UUID, user_id: UUID):
         return playlist
     except NotFoundException:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+
+
+async def get_artist_popularity_by_date(db_session: AsyncSession, start_date: datetime, end_date: datetime):
+    # Сначала получаем статистику прослушиваний
+    subquery = (
+        select(StatUserhistory.yt_id, func.count().label("play_count"))
+        .where(and_(StatUserhistory.created_at >= start_date, StatUserhistory.created_at <= end_date))
+        .group_by(StatUserhistory.yt_id)
+        .subquery()
+    )
+
+    # Затем джойним с треками
+    stmt = (
+        select(Track.artist, func.sum(subquery.c.play_count).label("total_plays"))
+        .select_from(Track.__table__.join(subquery, Track.yt_id == subquery.c.yt_id))
+        .group_by(Track.artist)
+        .order_by(func.sum(subquery.c.play_count).desc())
+    )
+
+    result = await db_session.execute(stmt)
+    return result.all()
 
 
 class YTService:

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 import json
 from typing import Annotated
 from uuid import UUID
@@ -13,16 +13,25 @@ from src.config import Config
 from src.repository import NotFoundException
 from src.database import get_async_session
 
-from src.app.services import RecomendationService, YTService, plst_owned_by_user
+from src.app.services import RecomendationService, YTService, get_artist_popularity_by_date, plst_owned_by_user
 from src.app.tasks import track_features
-from src.app.models import crud_features, crud_playlist_track, crud_playlist, crud_user, crud_track, User, crud_stat
+from src.app.models import (
+    crud_features,
+    crud_playlist_track,
+    crud_playlist,
+    crud_user,
+    crud_track,
+    User,
+    crud_stat,
+    crud_history,
+)
 from src.app.auth import auth_handler
 from src.app.schemas import (
     UUID_,
     AddTrackToPlaylist,
     Login,
     PlaylistNewname,
-    PlaylistTrackRead,
+    HistoryRead,
     StatCreate,
     StatTrackPlaybackRead,
     StatUpdate,
@@ -37,6 +46,7 @@ from src.app.schemas import (
     PlaylistUpdate,
     PlaylistTrackCreate,
     PlaylistTrackUpdate,
+    ArtistPopylarity,
 )
 
 router = APIRouter(prefix="/app", tags=["app"])
@@ -83,7 +93,67 @@ async def get_user(
     return UserRead.model_validate(user)
 
 
+@router.get("/user/history", response_model=list[HistoryRead], status_code=200)
+async def get_user_history(
+    user: Annotated[User, Depends(auth_handler.get_current_user)],
+    db_session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    history = await crud_history.get_many_by_value(db_session, value=user.id, column="user_id")
+    tracks = await crud_track.get_many_by_ids(db_session, ids=[i.yt_id for i in history], column="yt_id")
+
+    result = []
+    for i in history:
+        track = next(x for x in tracks if x.yt_id == i.yt_id)
+        result.append(HistoryRead(datetime=i.created_at, track=TrackRead.model_validate(track)))
+    return result
+
+
+@router.post("/user/history", status_code=200)
+async def send_user_history(
+    yt_id: UUID_,
+    user: Annotated[User, Depends(auth_handler.get_current_user)],
+    db_session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    await crud_history.create(db_session, StatCreate(yt_id=yt_id.id, user_id=user.id))
+
+
 # ---------------- ---------------- ---------------- ---------------- ----------------
+
+
+@router.get("/artist/popularity", status_code=200)
+async def get_artist_popularity(
+    start_date: date,
+    end_date: date,
+    db_session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    print(
+        datetime(
+            start_date.year,
+            start_date.month,
+            start_date.day,
+        ),
+        datetime(
+            end_date.year,
+            end_date.month,
+            end_date.day,
+        ),
+    )
+    popular_artists = await get_artist_popularity_by_date(
+        db_session,
+        datetime(
+            start_date.year,
+            start_date.month,
+            start_date.day,
+        ),
+        datetime(
+            end_date.year,
+            end_date.month,
+            end_date.day,
+            23,
+            59,
+        ),
+    )
+    return [ArtistPopylarity(artist=artist, play_count=play_count) for artist, play_count in popular_artists]
 
 
 @router.post("/playlists", status_code=201)

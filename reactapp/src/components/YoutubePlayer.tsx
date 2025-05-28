@@ -2,6 +2,7 @@ import React, { useContext } from "react";
 import YouTube from "react-youtube";
 import type { YouTubeProps, YouTubeEvent } from "react-youtube";
 import useWindowDimensions from "@/hooks/useWindowDimensions";
+import StatService from "@/APIs/StatService";
 
 type YoutubePlayerProps = {
   nextVideo: () => void;
@@ -25,11 +26,14 @@ const YoutubePlayer: React.FC<YoutubePlayerProps> = ({
   };
 
   const _onReady = async (event: YouTubeEvent<any>): Promise<void> => {
+    if (!nowPlay) return;
     const sleep = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
-    await sleep(100);
+    await sleep(10);
     event.target.playVideo();
     event.target.seekTo(0);
+
+    void StatService.sendClickTrack(nowPlay);
   };
 
   return (
@@ -37,7 +41,10 @@ const YoutubePlayer: React.FC<YoutubePlayerProps> = ({
       videoId={nowPlay || ""}
       opts={opts}
       onReady={_onReady}
-      onEnd={nextVideo}
+      onEnd={() => {
+        nextVideo();
+        void StatService.sendListenData(nowPlay);
+      }}
     />
   );
 };

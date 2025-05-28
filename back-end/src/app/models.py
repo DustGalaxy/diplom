@@ -262,10 +262,16 @@ class StatTrack(Base, UUIDMixin, TimestampMixin):
     track_playback: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
+class StatUserhistory(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "user_history_stat"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    yt_id: Mapped[str] = mapped_column(ForeignKey("tracks.yt_id"), nullable=False)
+
+
 crud_user = crud(User)
 crud_playlist = crud(Playlist)
-
 crud_session = crud(Session)
+crud_history = crud(StatUserhistory)
 
 
 class crud_stat(crud(StatTrack)):

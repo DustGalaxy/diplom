@@ -77,7 +77,6 @@ export default function PlayPage() {
     } else {
       setNowPlay(playlistContent[index + 1].yt_id);
     }
-    void StatService.sendListenData(nowPlay);
   };
 
   React.useEffect(() => {
