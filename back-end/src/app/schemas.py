@@ -140,7 +140,7 @@ class ArtistPopylarity(BaseModel):
 
 
 class HistoryRead(BaseModel):
-    datetime: datetime
+    created_at: datetime
     track: TrackRead
 
 

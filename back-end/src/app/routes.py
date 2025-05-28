@@ -104,7 +104,7 @@ async def get_user_history(
     result = []
     for i in history:
         track = next(x for x in tracks if x.yt_id == i.yt_id)
-        result.append(HistoryRead(datetime=i.created_at, track=TrackRead.model_validate(track)))
+        result.append(HistoryRead(created_at=i.created_at, track=TrackRead.model_validate(track)))
     return result
 
 
