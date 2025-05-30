@@ -29,7 +29,11 @@ export default function Header() {
             {auth.user ? (
               <Link to="/logout">Вийти</Link>
             ) : (
-              <Link to="/login">Увійти</Link>
+              <div className="flex gap-2">
+                <a href="/login">Увійти</a>
+                <Separator orientation="vertical" />
+                <a href="/regestration">Реєстрація</a>
+              </div>
             )}
           </div>
         </div>
