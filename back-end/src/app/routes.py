@@ -7,7 +7,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from hnswlib import Index
 from pytubefix.exceptions import VideoUnavailable
-
+from loguru import logger
 
 from src.config import Config
 from src.repository import NotFoundException
@@ -61,7 +61,7 @@ async def login(
     session_id, user = await auth_handler.create_session(db_session, data)
 
     response.set_cookie("session_id", str(session_id), max_age=Config.SESSION_LIVE_TIME, secure=True, httponly=True)
-
+    logger.info(f"user: {user.username} | login ")
     return UserRead.model_validate(user)
 
 
@@ -73,6 +73,7 @@ async def logout(
 ):
     if session_id in [str(session.id) for session in user.sessions]:
         await auth_handler.delete_session(db_session, session_id)
+        logger.info(f"user: {user.username} | logout ")
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logined")
 
@@ -83,6 +84,7 @@ async def create_user(
     db_session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> UserRead:
     user = await crud_user.create(db_session, user_scheme)
+    logger.info(f"user: {user.username} | registred ")
     return UserRead.model_validate(user)
 
 
@@ -90,6 +92,7 @@ async def create_user(
 async def get_user(
     user: Annotated[User, Depends(auth_handler.get_current_user)],
 ):
+    logger.info(f"user: {user.username} | user geted ")
     return UserRead.model_validate(user)
 
 
@@ -105,6 +108,7 @@ async def get_user_history(
     for i in history:
         track = next(x for x in tracks if x.yt_id == i.yt_id)
         result.append(HistoryRead(created_at=i.created_at, track=TrackRead.model_validate(track)))
+    logger.info(f"user: {user.username} | history geted ")
     return result
 
 
@@ -115,6 +119,7 @@ async def send_user_history(
     db_session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     await crud_history.create(db_session, StatCreate(yt_id=yt_id.id, user_id=user.id))
+    logger.info(f"user: {user.username} | upd history ")
 
 
 # ---------------- ---------------- ---------------- ---------------- ----------------
@@ -126,18 +131,6 @@ async def get_artist_popularity(
     end_date: date,
     db_session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    print(
-        datetime(
-            start_date.year,
-            start_date.month,
-            start_date.day,
-        ),
-        datetime(
-            end_date.year,
-            end_date.month,
-            end_date.day,
-        ),
-    )
     popular_artists = await get_artist_popularity_by_date(
         db_session,
         datetime(
@@ -153,6 +146,7 @@ async def get_artist_popularity(
             59,
         ),
     )
+    logger.info("get artist popylarity")
     return [ArtistPopylarity(artist=artist, play_count=play_count) for artist, play_count in popular_artists]
 
 
@@ -164,6 +158,7 @@ async def create_playlist(
 ):
     playlist_scheme.owner_id = user.id
     playlist = await crud_playlist.create(db_session, playlist_scheme)
+    logger.info(f"user: {user.username} | new playlist")
     return PlaylistRead.model_validate(playlist)
 
 
@@ -173,6 +168,7 @@ async def get_playlists(
     db_session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     playlists = await crud_playlist.get_many_by_value(db_session, user.id, "owner_id")
+    logger.info(f"user: {user.username} | get playlists")
     return [PlaylistRead.model_validate(playlist) for playlist in playlists]
 
 
@@ -182,6 +178,7 @@ async def get_tracks_by_query(
     query: str = "",
 ):
     tracks = await crud_track.query_tracks(db_session, query)
+    logger.info("get tracks by query")
     return [TrackRead.model_validate(track) for track in tracks]
 
 
@@ -194,6 +191,7 @@ async def add_listen(
     try:
         stat_obj = await crud_stat.get(db_session, yt_id.id, user.id)  # type: ignore
         await crud_stat.update_by_id(db_session, StatUpdate(track_playback=stat_obj + 1), stat_obj.id)
+        logger.info(f"user: {user.username} | upd statistic for track: {stat_obj.yt_id} ")
     except NotFoundException:
         await crud_stat.create(db_session, StatCreate(yt_id=yt_id.id, user_id=user.id))  # type: ignore
 
@@ -206,6 +204,7 @@ async def get_stat_track_playback(
 ):
     try:
         stat_obj = await crud_stat.get(db_session, yt_id, user.id)  # type: ignore
+        logger.info(f"user: {user.username} | get statistic for track: {stat_obj.yt_id} ")
         return StatTrackPlaybackRead(
             track_playback=stat_obj.track_playback,
         )
@@ -225,6 +224,7 @@ async def get_stat_date_add_to_plst(
     playlist = await plst_owned_by_user(db_session, playlist_id, user.id)
     try:
         stat_obj = await crud_playlist_track.select_by_track_and_playlist(db_session, track_id, playlist_id)  # type: ignore
+        logger.info(f"user: {user.username} | get statistic for track: {stat_obj.yt_id} in plst: {playlist.name}")
         return {"in_playlist_since": stat_obj.created_at}
     except NotFoundException:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
@@ -238,8 +238,8 @@ async def get_tracks(
 ):
     playlist = await plst_owned_by_user(db_session, plst_id, user.id)
 
-    # TODO sorting by position
     tracks_rel = await crud_playlist_track.get_many_by_value(db_session, playlist.id, "playlist_id")
+    logger.info(f"user: {user.username} | get tracks for plst: {playlist.name}")
     return [
         TrackRead(
             id=track_rel.track.id,
@@ -248,7 +248,7 @@ async def get_tracks(
             artist=track_rel.track.artist,
             duration=track_rel.track.duration,
         )
-        for track_rel in tracks_rel
+        for track_rel in sorted(tracks_rel, key=lambda x: x.position)
     ]
 
 
@@ -262,6 +262,7 @@ async def rename_playlist(
     playlist = await plst_owned_by_user(db_session, plst_id, user.id)
 
     upd_playlist = await crud_playlist.update_by_id(db_session, new_name, playlist.id)
+    logger.info(f"user: {user.username} | upd plst name from: {playlist.name}, to: {upd_playlist.name}")
     return PlaylistRead.model_validate(upd_playlist)
 
 
@@ -297,6 +298,7 @@ async def add_track_to_playlist(
     )
     await crud_playlist_track.create(db_session, playlist_track)
     await crud_playlist.update_by_id(db_session, PlaylistUpdate(tracks_amount=playlist.tracks_amount + 1), playlist.id)
+    logger.info(f"user: {user.username} | add track: {track.yt_id} in plst: {playlist.name}")
     return TrackRead.model_validate(track)
 
 
@@ -313,6 +315,7 @@ async def delete_track_from_playlist(
         await crud_playlist.update_by_id(
             db_session, PlaylistUpdate(tracks_amount=playlist.tracks_amount - 1), playlist.id
         )
+        logger.info(f"user: {user.username} | remove track: {track_id} from plst: {playlist.name}")
     except NotFoundException:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
 
@@ -342,7 +345,9 @@ async def swap_tracks_positions(
 
         await crud_playlist_track.update_by_id(db_session, PlaylistTrackUpdate(position=item1.position), item2.id)
         await crud_playlist_track.update_by_id(db_session, PlaylistTrackUpdate(position=item2.position), item1.id)
-
+        logger.info(
+            f"user: {user.username} | swap tracks 1: {item1.track_id} 2: {item2.track_id} in plst: {playlist.name}"
+        )
     except NotFoundException:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
@@ -378,7 +383,7 @@ async def playlist_recomendations(
             track = next(x for x in tracks if x.yt_id == item[0])
             track.score = item[1]
             result.append(track)
-
+        logger.info(f"user: {user.username} | get recommendations for plst: {playlist.name}")
         return [TrackRecommendRead.model_validate(track) for track in result]
     except NotFoundException:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)

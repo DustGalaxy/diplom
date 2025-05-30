@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
         filter="my_module",
         level="INFO",
     )
-    logger.add("file_{time}.log", rotation="12:00", compression="zip")
+    logger.add("system-log.log", rotation="100 MB", compression="zip")
 
     await broker.startup()
     yield
