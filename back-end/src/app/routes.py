@@ -48,6 +48,7 @@ from src.app.schemas import (
     PlaylistTrackUpdate,
     ArtistPopylarity,
 )
+from src.utils import cache_response
 
 router = APIRouter(prefix="/app", tags=["app"])
 
@@ -126,6 +127,7 @@ async def send_user_history(
 
 
 @router.get("/artist/popularity", status_code=200)
+@cache_response(ttl=120, namespace="statistic")
 async def get_artist_popularity(
     start_date: date,
     end_date: date,
